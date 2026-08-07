@@ -1,4 +1,5 @@
 using LocalMeetingNotes.App.Audio;
+using LocalMeetingNotes.App.Logging;
 using LocalMeetingNotes.App.Settings;
 using LocalMeetingNotes.App.Transcription;
 using LocalMeetingNotes.App.ViewModels;
@@ -36,12 +37,21 @@ public static class AppServices
         services.AddSingleton<WavFileValidator>();
         services.AddSingleton<RecordingCoordinator>();
         services.AddSingleton<IMeetingNoteWriter, MeetingNoteWriter>();
+        services.AddSingleton<MeetingHistoryScanner>();
+        services.AddSingleton<DiskSpaceChecker>();
         services.AddSingleton<TranscriptionPipeline>();
         services.AddSingleton<ITranscriptionQueue, TranscriptionQueue>();
         services.AddSingleton<IRecoveryService, RecoveryService>();
+        services.AddSingleton<IAppLogger>(provider =>
+            new FileAppLogger(() => provider.GetRequiredService<ISettingsStore>().Current.MeetingsFolder));
 
         services.AddSingleton<MainViewModel>();
         services.AddTransient<StartRecordingViewModel>();
+        services.AddTransient(provider => new SettingsViewModel(
+            provider.GetRequiredService<ISettingsStore>(),
+            provider.GetRequiredService<IAudioDeviceService>(),
+            provider.GetRequiredService<IModelCatalog>(),
+            settingsPath));
 
         return services.BuildServiceProvider();
     }

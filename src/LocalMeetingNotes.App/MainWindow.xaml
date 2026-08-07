@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Local Meeting Notes" Height="560" Width="860" MinHeight="440" MinWidth="680">
+        Title="Local Meeting Notes" Height="560" Width="920" MinHeight="440" MinWidth="720">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </Window.Resources>
@@ -16,12 +16,15 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel Orientation="Horizontal">
-            <Button Width="125" Height="34" Margin="0,0,8,0" Command="{Binding StartCommand}" Content="Start recording" />
-            <Button Width="110" Height="34" Margin="0,0,20,0" Command="{Binding StopCommand}" Content="Stop" />
-            <TextBlock VerticalAlignment="Center" FontSize="18" FontWeight="SemiBold" Text="{Binding ElapsedText}" />
-            <TextBlock Margin="20,0,0,0" VerticalAlignment="Center" Text="{Binding StatusText}" />
-        </StackPanel>
+        <DockPanel>
+            <Button DockPanel.Dock="Right" Width="100" Height="34" Content="Settings" Command="{Binding OpenSettingsCommand}" />
+            <StackPanel Orientation="Horizontal">
+                <Button Width="125" Height="34" Margin="0,0,8,0" Command="{Binding StartCommand}" Content="Start recording" />
+                <Button Width="110" Height="34" Margin="0,0,20,0" Command="{Binding StopCommand}" Content="Stop" />
+                <TextBlock VerticalAlignment="Center" FontSize="18" FontWeight="SemiBold" Text="{Binding ElapsedText}" />
+                <TextBlock Margin="20,0,0,0" VerticalAlignment="Center" Text="{Binding StatusText}" />
+            </StackPanel>
+        </DockPanel>
 
         <Border Grid.Row="1" Margin="0,14,0,0" Padding="10" Background="#FFF4CE" BorderBrush="#CC9A06" BorderThickness="1"
                 Visibility="{Binding HasNoModel, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -44,15 +47,23 @@
         </Grid>
 
         <GroupBox Grid.Row="3" Header="Recent meetings and queue">
-            <ListView ItemsSource="{Binding Sessions}" Margin="8">
-                <ListView.View>
-                    <GridView>
-                        <GridViewColumn Header="Title" Width="320" DisplayMemberBinding="{Binding Title}" />
-                        <GridViewColumn Header="Status" Width="135" DisplayMemberBinding="{Binding Status}" />
-                        <GridViewColumn Header="Details" Width="300" DisplayMemberBinding="{Binding Detail}" />
-                    </GridView>
-                </ListView.View>
-            </ListView>
+            <DockPanel Margin="8">
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                    <Button Width="90" Margin="0,0,8,0" Content="Open" Command="{Binding OpenItemCommand}" CommandParameter="{Binding SelectedItem, ElementName=SessionsList}" />
+                    <Button Width="110" Margin="0,0,8,0" Content="Open folder" Command="{Binding OpenFolderCommand}" CommandParameter="{Binding SelectedItem, ElementName=SessionsList}" />
+                    <Button Width="120" Margin="0,0,8,0" Content="Copy full note" Command="{Binding CopyNoteCommand}" CommandParameter="{Binding SelectedItem, ElementName=SessionsList}" />
+                    <Button Width="90" Content="Retry" Command="{Binding RetryCommand}" CommandParameter="{Binding SelectedItem, ElementName=SessionsList}" />
+                </StackPanel>
+                <ListView x:Name="SessionsList" ItemsSource="{Binding Sessions}" MouseDoubleClick="SessionsList_MouseDoubleClick">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Title" Width="300" DisplayMemberBinding="{Binding Title}" />
+                            <GridViewColumn Header="Status" Width="135" DisplayMemberBinding="{Binding Status}" />
+                            <GridViewColumn Header="Details" Width="320" DisplayMemberBinding="{Binding Detail}" />
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </DockPanel>
         </GroupBox>
     </Grid>
 </Window>

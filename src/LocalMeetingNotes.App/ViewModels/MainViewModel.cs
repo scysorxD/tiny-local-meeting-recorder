@@ -38,6 +38,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         StartCommand = new RelayCommand(() => StartRequested?.Invoke(this, EventArgs.Empty), () => !IsRecording);
         StopCommand = new AsyncRelayCommand(StopRecordingAsync, () => IsRecording);
+        OpenSettingsCommand = new RelayCommand(() => SettingsRequested?.Invoke(this, EventArgs.Empty));
+        RetryCommand = new AsyncRelayCommand<SessionRowViewModel>(RetryAsync, row => row?.SessionId is not null);
+        OpenItemCommand = new RelayCommand<SessionRowViewModel>(OpenItem);
+        CopyNoteCommand = new RelayCommand<SessionRowViewModel>(CopyNote, row => row is { Status: "Completed" });
+        OpenFolderCommand = new RelayCommand<SessionRowViewModel>(OpenFolder);
         _timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _timer.Tick += (_, _) => UpdateElapsed();
 
@@ -48,11 +53,59 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public event EventHandler? StartRequested;
 
+    public event EventHandler? SettingsRequested;
+
     public ObservableCollection<SessionRowViewModel> Sessions { get; } = [];
 
     public IRelayCommand StartCommand { get; }
 
     public IAsyncRelayCommand StopCommand { get; }
+
+    public IRelayCommand OpenSettingsCommand { get; }
+
+    public IAsyncRelayCommand<SessionRowViewModel> RetryCommand { get; }
+
+    public IRelayCommand<SessionRowViewModel> OpenItemCommand { get; }
+
+    public IRelayCommand<SessionRowViewModel> CopyNoteCommand { get; }
+
+    public IRelayCommand<SessionRowViewModel> OpenFolderCommand { get; }
+
+    public string GetMeetingsFolder() => _settingsStore.Current.MeetingsFolder;
+
+    public bool CloseToTray => _settingsStore.Current.CloseToTray;
+
+    public GlobalAppStatus ComputeGlobalStatus()
+    {
+        var hasQueueWork = Sessions.Any(row =>
+            row.Status is nameof(SessionStatus.Queued)
+                or nameof(SessionStatus.TranscribingMic)
+                or nameof(SessionStatus.TranscribingSystem)
+                or nameof(SessionStatus.Merging)
+                or nameof(SessionStatus.WritingNote));
+
+        if (IsRecording && hasQueueWork)
+        {
+            return GlobalAppStatus.RecordingAndTranscribing;
+        }
+
+        if (IsRecording)
+        {
+            return GlobalAppStatus.Recording;
+        }
+
+        if (hasQueueWork)
+        {
+            return GlobalAppStatus.Transcribing;
+        }
+
+        if (Sessions.Any(row => row.Status is nameof(SessionStatus.Failed) or nameof(SessionStatus.Interrupted)))
+        {
+            return GlobalAppStatus.Error;
+        }
+
+        return GlobalAppStatus.Ready;
+    }
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
@@ -148,6 +201,72 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             Sessions.Add(row);
         }
+    }
+
+    private async Task RetryAsync(SessionRowViewModel? row)
+    {
+        if (row?.SessionId is not { } sessionId)
+        {
+            return;
+        }
+
+        try
+        {
+            await _transcriptionQueue.RetryAsync(sessionId);
+            StatusText = "Retry queued.";
+            await RefreshSessionsAsync();
+        }
+        catch (Exception exception)
+        {
+            StatusText = exception.Message;
+            System.Windows.MessageBox.Show(exception.Message, "Retry failed", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+        }
+    }
+
+    private static void OpenItem(SessionRowViewModel? row)
+    {
+        if (row is null || string.IsNullOrWhiteSpace(row.Path) || !File.Exists(row.Path))
+        {
+            return;
+        }
+
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = row.Path,
+            UseShellExecute = true,
+        });
+    }
+
+    private static void CopyNote(SessionRowViewModel? row)
+    {
+        if (row is null || !File.Exists(row.Path))
+        {
+            return;
+        }
+
+        System.Windows.Clipboard.SetText(File.ReadAllText(row.Path));
+    }
+
+    private void OpenFolder(SessionRowViewModel? row)
+    {
+        var target = row?.Path;
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            target = GetMeetingsFolder();
+        }
+
+        var folder = File.Exists(target) ? Path.GetDirectoryName(target) : target;
+        if (string.IsNullOrWhiteSpace(folder))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(folder);
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = folder,
+            UseShellExecute = true,
+        });
     }
 
     public void Dispose()
