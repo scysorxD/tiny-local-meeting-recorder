@@ -9,6 +9,7 @@ public partial class StartRecordingWindow : Window
     public StartRecordingWindow(StartRecordingViewModel viewModel)
     {
         InitializeComponent();
+        DarkTitleBar.Apply(this);
         ViewModel = viewModel;
         DataContext = viewModel;
     }

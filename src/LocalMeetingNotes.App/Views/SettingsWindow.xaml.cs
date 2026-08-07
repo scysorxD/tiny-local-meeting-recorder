@@ -7,6 +7,7 @@ public partial class SettingsWindow : System.Windows.Window
     public SettingsWindow(SettingsViewModel viewModel)
     {
         InitializeComponent();
+        DarkTitleBar.Apply(this);
         DataContext = viewModel;
     }
 

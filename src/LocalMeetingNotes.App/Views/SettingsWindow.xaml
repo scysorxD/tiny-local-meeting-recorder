@@ -1,59 +1,116 @@
 <Window x:Class="LocalMeetingNotes.App.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Settings" Height="640" Width="620" MinHeight="520" MinWidth="560"
-        WindowStartupLocation="CenterOwner">
-    <ScrollViewer Padding="16" VerticalScrollBarVisibility="Auto">
-        <StackPanel>
-            <TextBlock FontSize="18" FontWeight="SemiBold" Text="General" Margin="0,0,0,8" />
-            <TextBlock Text="Meetings folder" />
-            <DockPanel Margin="0,4,0,8">
-                <Button DockPanel.Dock="Right" Width="80" Margin="8,0,0,0" Content="Browse" Command="{Binding BrowseMeetingsFolderCommand}" />
-                <TextBox Text="{Binding MeetingsFolder, UpdateSourceTrigger=PropertyChanged}" />
-            </DockPanel>
-            <CheckBox Content="Start minimized" IsChecked="{Binding StartMinimized}" Margin="0,0,0,4" />
-            <CheckBox Content="Close to tray" IsChecked="{Binding CloseToTray}" Margin="0,0,0,4" />
-            <CheckBox Content="Delete audio after successful transcription" IsChecked="{Binding DeleteAudioAfterSuccess}" Margin="0,0,0,16" />
+        Title="Settings"
+        Height="700" Width="640" MinHeight="520" MinWidth="560"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource FloorBrush}"
+        UseLayoutRounding="True">
+    <Window.Resources>
+        <DataTemplate x:Key="DeviceTemplate">
+            <TextBlock Text="{Binding FriendlyName}" TextTrimming="CharacterEllipsis" />
+        </DataTemplate>
+        <DataTemplate x:Key="ModelTemplate">
+            <TextBlock Text="{Binding FileName}" TextTrimming="CharacterEllipsis" />
+        </DataTemplate>
+    </Window.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
-            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Audio" Margin="0,0,0,8" />
-            <TextBlock Text="Microphone" />
-            <ComboBox Margin="0,4,0,8"
-                      ItemsSource="{Binding Microphones}"
-                      SelectedItem="{Binding SelectedMicrophone}"
-                      DisplayMemberPath="FriendlyName" />
-            <TextBlock Text="System output" />
-            <ComboBox Margin="0,4,0,8"
-                      ItemsSource="{Binding RenderDevices}"
-                      SelectedItem="{Binding SelectedRenderDevice}"
-                      DisplayMemberPath="FriendlyName" />
-            <Button Width="120" HorizontalAlignment="Left" Content="Refresh devices" Command="{Binding RefreshDevicesCommand}" Margin="0,0,0,16" />
+        <ScrollViewer Padding="24,20,24,20" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock Style="{StaticResource Caption}" Text="GENERAL" Margin="2,0,0,8" />
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Muted}" Text="Meetings folder" Margin="0,0,0,6" />
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="14,8"
+                                    Content="Browse" Command="{Binding BrowseMeetingsFolderCommand}" />
+                            <TextBox Text="{Binding MeetingsFolder, UpdateSourceTrigger=PropertyChanged}" />
+                        </DockPanel>
 
-            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Whisper" Margin="0,0,0,8" />
-            <TextBlock Text="Models folder" />
-            <DockPanel Margin="0,4,0,8">
-                <Button DockPanel.Dock="Right" Width="80" Margin="8,0,0,0" Content="Browse" Command="{Binding BrowseModelsFolderCommand}" />
-                <TextBox Text="{Binding ModelsFolder, UpdateSourceTrigger=PropertyChanged}" />
-            </DockPanel>
-            <TextBlock Text="Model" />
-            <ComboBox Margin="0,4,0,8"
-                      ItemsSource="{Binding Models}"
-                      SelectedItem="{Binding SelectedModel}"
-                      DisplayMemberPath="FileName" />
-            <Button Width="120" HorizontalAlignment="Left" Content="Refresh models" Command="{Binding RefreshModelsCommand}" Margin="0,0,0,8" />
-            <TextBlock Text="{Binding ModelStatus}" TextWrapping="Wrap" Margin="0,0,0,8" />
-            <TextBlock Text="Language" />
-            <ComboBox Margin="0,4,0,8" ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" />
-            <TextBlock Text="Transcription threads" />
-            <TextBox Width="80" HorizontalAlignment="Left" Margin="0,4,0,16" Text="{Binding TranscriptionThreads}" />
+                        <Border Height="1" Background="{StaticResource StrokeBrush}" Margin="0,18,0,0" />
 
-            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Configuration" Margin="0,0,0,8" />
-            <Button Width="160" HorizontalAlignment="Left" Content="Open settings.json" Command="{Binding OpenSettingsFileCommand}" Margin="0,0,0,16" />
+                        <CheckBox Margin="0,16,0,0" IsChecked="{Binding StartMinimized}" Content="Start minimized" />
+                        <CheckBox Margin="0,16,0,0" IsChecked="{Binding CloseToTray}" Content="Close to tray" />
+                        <CheckBox Margin="0,16,0,0" IsChecked="{Binding DeleteAudioAfterSuccess}">
+                            <StackPanel>
+                                <TextBlock Text="Delete audio after successful transcription" />
+                                <TextBlock Style="{StaticResource Muted}" FontSize="11" Margin="0,3,0,0"
+                                           Text="Saves disk space by removing the raw .wav files." />
+                            </StackPanel>
+                        </CheckBox>
+                    </StackPanel>
+                </Border>
 
-            <StackPanel Orientation="Horizontal">
-                <Button Width="100" Height="32" Margin="0,0,8,0" Content="Save" Command="{Binding SaveCommand}" IsDefault="True" />
-                <Button Width="100" Height="32" Content="Close" IsCancel="True" Click="Close_Click" />
+                <TextBlock Style="{StaticResource Caption}" Text="AUDIO" Margin="2,22,0,8" />
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Muted}" Text="Microphone" Margin="0,0,0,6" />
+                        <ComboBox ItemsSource="{Binding Microphones}"
+                                  SelectedItem="{Binding SelectedMicrophone}"
+                                  ItemTemplate="{StaticResource DeviceTemplate}" />
+
+                        <TextBlock Style="{StaticResource Muted}" Text="System output" Margin="0,16,0,6" />
+                        <ComboBox ItemsSource="{Binding RenderDevices}"
+                                  SelectedItem="{Binding SelectedRenderDevice}"
+                                  ItemTemplate="{StaticResource DeviceTemplate}" />
+
+                        <Button Style="{StaticResource QuietButton}" HorizontalAlignment="Left" Margin="0,16,0,0"
+                                Content="Refresh devices" Command="{Binding RefreshDevicesCommand}" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Style="{StaticResource Caption}" Text="WHISPER" Margin="2,22,0,8" />
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Muted}" Text="Models folder" Margin="0,0,0,6" />
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="14,8"
+                                    Content="Browse" Command="{Binding BrowseModelsFolderCommand}" />
+                            <TextBox Text="{Binding ModelsFolder, UpdateSourceTrigger=PropertyChanged}" />
+                        </DockPanel>
+
+                        <TextBlock Style="{StaticResource Muted}" Text="Model" Margin="0,16,0,6" />
+                        <ComboBox ItemsSource="{Binding Models}"
+                                  SelectedItem="{Binding SelectedModel}"
+                                  ItemTemplate="{StaticResource ModelTemplate}" />
+
+                        <Button Style="{StaticResource QuietButton}" HorizontalAlignment="Left" Margin="0,16,0,0"
+                                Content="Refresh models" Command="{Binding RefreshModelsCommand}" />
+
+                        <TextBlock Style="{StaticResource Muted}" Margin="0,12,0,0" TextWrapping="Wrap"
+                                   Text="{Binding ModelStatus}" />
+
+                        <TextBlock Style="{StaticResource Muted}" Text="Language" Margin="0,16,0,6" />
+                        <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" />
+
+                        <TextBlock Style="{StaticResource Muted}" Text="Transcription threads" Margin="0,16,0,6" />
+                        <TextBox Width="90" HorizontalAlignment="Left" Text="{Binding TranscriptionThreads}" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Style="{StaticResource Caption}" Text="ADVANCED" Margin="2,22,0,8" />
+                <Border Style="{StaticResource Card}">
+                    <Button Style="{StaticResource GhostButton}" HorizontalAlignment="Left"
+                            Content="Open settings.json" Command="{Binding OpenSettingsFileCommand}" />
+                </Border>
             </StackPanel>
-            <TextBlock Margin="0,12,0,0" Text="{Binding StatusMessage}" />
-        </StackPanel>
-    </ScrollViewer>
+        </ScrollViewer>
+
+        <Border Grid.Row="1" BorderBrush="{StaticResource StrokeBrush}" BorderThickness="0,1,0,0"
+                Background="{StaticResource SurfaceBrush}" Padding="24,14">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="Close" Padding="18,8" IsCancel="True" Click="Close_Click" />
+                    <Button Style="{StaticResource PrimaryButton}" Margin="10,0,0,0" Padding="18,8"
+                            Content="Save" IsDefault="True" Command="{Binding SaveCommand}" />
+                </StackPanel>
+                <TextBlock Style="{StaticResource Muted}" VerticalAlignment="Center" Text="{Binding StatusMessage}" />
+            </DockPanel>
+        </Border>
+    </Grid>
 </Window>

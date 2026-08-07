@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     public MainWindow(MainViewModel viewModel, IServiceProvider services, TrayIconService tray, IAppLogger logger)
     {
         InitializeComponent();
+        Views.DarkTitleBar.Apply(this);
         _viewModel = viewModel;
         _services = services;
         _tray = tray;

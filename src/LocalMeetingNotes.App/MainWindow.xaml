@@ -3,73 +3,182 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:views="clr-namespace:LocalMeetingNotes.App.Views"
         mc:Ignorable="d"
-        Title="Local Meeting Notes" Height="560" Width="920" MinHeight="440" MinWidth="720">
+        Title="Local Meeting Notes"
+        Height="640" Width="980" MinHeight="520" MinWidth="820"
+        Background="{StaticResource FloorBrush}"
+        TextOptions.TextFormattingMode="Ideal"
+        UseLayoutRounding="True">
     <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        <views:SessionStatusBrushConverter x:Key="StatusBrush" />
+        <views:SessionStatusLabelConverter x:Key="StatusLabel" />
+        <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
     </Window.Resources>
-    <Grid Margin="20">
+
+    <Grid Margin="24,18,24,20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <DockPanel>
-            <Button DockPanel.Dock="Right" Width="100" Height="34" Content="Settings" Command="{Binding OpenSettingsCommand}" />
-            <StackPanel Orientation="Horizontal">
-                <Button Width="125" Height="34" Margin="0,0,8,0" Command="{Binding StartCommand}" Content="Start recording" />
-                <Button Width="110" Height="34" Margin="0,0,20,0" Command="{Binding StopCommand}" Content="Stop" />
-                <TextBlock VerticalAlignment="Center" FontSize="18" FontWeight="SemiBold" Text="{Binding ElapsedText}" />
-                <TextBlock Margin="20,0,0,0" VerticalAlignment="Center" Text="{Binding StatusText}" />
+        <!-- Header -->
+        <DockPanel Grid.Row="0" Margin="0,0,0,18">
+            <Button DockPanel.Dock="Right"
+                    Style="{StaticResource IconButton}"
+                    ToolTip="Settings"
+                    Command="{Binding OpenSettingsCommand}">
+                <TextBlock FontFamily="{StaticResource IconFont}" FontSize="15" Text="&#xE713;"
+                           Foreground="{StaticResource MutedBrush}" />
+            </Button>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Ellipse Width="16" Height="16"
+                         Stroke="{StaticResource AccentBrush}" StrokeThickness="1.6"
+                         VerticalAlignment="Center" />
+                <Ellipse Width="5" Height="5" Margin="-10.5,0,0,0"
+                         Fill="{StaticResource AccentBrush}" VerticalAlignment="Center" />
+                <TextBlock Text="Local Meeting Notes" Margin="15,0,0,0"
+                           FontSize="13.5" FontWeight="SemiBold" VerticalAlignment="Center" />
             </StackPanel>
         </DockPanel>
 
-        <Border Grid.Row="1" Margin="0,14,0,0" Padding="10" Background="#FFF4CE" BorderBrush="#CC9A06" BorderThickness="1"
-                Visibility="{Binding HasNoModel, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <TextBlock Text="No valid Whisper model was found. Recording still works; transcription will wait until a model is available." TextWrapping="Wrap" />
+        <!-- Model warning -->
+        <Border Grid.Row="1" Margin="0,0,0,14" Padding="14,10"
+                CornerRadius="10"
+                Background="{StaticResource WarningSurfaceBrush}"
+                BorderBrush="{StaticResource WarningStrokeBrush}"
+                BorderThickness="1"
+                Visibility="{Binding HasNoModel, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock FontFamily="{StaticResource IconFont}" FontSize="13" Text="&#xE7BA;"
+                           Foreground="{StaticResource WarningBrush}" VerticalAlignment="Center" />
+                <TextBlock Margin="10,0,0,0" TextWrapping="Wrap" VerticalAlignment="Center"
+                           Foreground="{StaticResource WarningBrush}"
+                           Text="No Whisper model found. Recording still works; transcription will wait until a model is available." />
+            </StackPanel>
         </Border>
 
-        <Grid Grid.Row="2" Margin="0,14,0,14">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <StackPanel Margin="0,0,12,0">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Right" Text="{Binding MicrophoneLevel, StringFormat={}{0:P0}}" />
-                    <TextBlock Text="Microphone level" />
-                </DockPanel>
-                <ProgressBar Height="18" Minimum="0" Maximum="1" Value="{Binding MicrophoneLevel, Mode=OneWay}" />
-            </StackPanel>
-            <StackPanel Grid.Column="1">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Right" Text="{Binding SystemLevel, StringFormat={}{0:P0}}" />
-                    <TextBlock Text="System audio level" />
-                </DockPanel>
-                <ProgressBar Height="18" Minimum="0" Maximum="1" Value="{Binding SystemLevel, Mode=OneWay}" />
-            </StackPanel>
-        </Grid>
+        <!-- Recording hero -->
+        <Border Grid.Row="2" Style="{StaticResource Card}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-        <GroupBox Grid.Row="3" Header="Recent meetings and queue">
-            <DockPanel Margin="8">
-                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
-                    <Button Width="90" Margin="0,0,8,0" Content="Open" Command="{Binding OpenItemCommand}" CommandParameter="{Binding SelectedItem, ElementName=SessionsList}" />
-                    <Button Width="110" Margin="0,0,8,0" Content="Open folder" Command="{Binding OpenFolderCommand}" CommandParameter="{Binding SelectedItem, ElementName=SessionsList}" />
-                    <Button Width="120" Margin="0,0,8,0" Content="Copy full note" Command="{Binding CopyNoteCommand}" CommandParameter="{Binding SelectedItem, ElementName=SessionsList}" />
-                    <Button Width="90" Content="Retry" Command="{Binding RetryCommand}" CommandParameter="{Binding SelectedItem, ElementName=SessionsList}" />
+                <StackPanel Grid.Row="0" Grid.Column="0">
+                    <TextBlock Style="{StaticResource Timer}" Text="{Binding ElapsedText}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <Ellipse Width="7" Height="7" VerticalAlignment="Center">
+                            <Ellipse.Style>
+                                <Style TargetType="Ellipse">
+                                    <Setter Property="Fill" Value="{StaticResource MutedBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsRecording}" Value="True">
+                                            <Setter Property="Fill" Value="{StaticResource DangerBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Ellipse.Style>
+                        </Ellipse>
+                        <TextBlock Style="{StaticResource Muted}" Margin="8,0,0,0"
+                                   VerticalAlignment="Center" Text="{Binding StatusText}" />
+                    </StackPanel>
                 </StackPanel>
-                <ListView x:Name="SessionsList" ItemsSource="{Binding Sessions}" MouseDoubleClick="SessionsList_MouseDoubleClick">
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="Title" Width="300" DisplayMemberBinding="{Binding Title}" />
-                            <GridViewColumn Header="Status" Width="135" DisplayMemberBinding="{Binding Status}" />
-                            <GridViewColumn Header="Details" Width="320" DisplayMemberBinding="{Binding Detail}" />
-                        </GridView>
-                    </ListView.View>
-                </ListView>
-            </DockPanel>
-        </GroupBox>
+
+                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource PrimaryButton}" Padding="20,10"
+                            Command="{Binding StartCommand}" Content="Start recording" />
+                    <Button Margin="10,0,0,0" Padding="20,10"
+                            Command="{Binding StopCommand}" Content="Stop" />
+                </StackPanel>
+
+                <Grid Grid.Row="1" Grid.ColumnSpan="2" Margin="0,22,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="28" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <DockPanel Margin="0,0,0,7">
+                            <TextBlock DockPanel.Dock="Right" Style="{StaticResource Caption}"
+                                       Text="{Binding MicrophoneLevel, StringFormat={}{0:P0}}" />
+                            <TextBlock Style="{StaticResource Caption}" Text="MICROPHONE" />
+                        </DockPanel>
+                        <ProgressBar Style="{StaticResource MeterBar}" Value="{Binding MicrophoneLevel, Mode=OneWay}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2">
+                        <DockPanel Margin="0,0,0,7">
+                            <TextBlock DockPanel.Dock="Right" Style="{StaticResource Caption}"
+                                       Text="{Binding SystemLevel, StringFormat={}{0:P0}}" />
+                            <TextBlock Style="{StaticResource Caption}" Text="SYSTEM AUDIO" />
+                        </DockPanel>
+                        <ProgressBar Style="{StaticResource MeterBar}" Value="{Binding SystemLevel, Mode=OneWay}" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <TextBlock Grid.Row="3" Style="{StaticResource Caption}" Margin="2,22,0,8" Text="RECENT MEETINGS" />
+
+        <ListView Grid.Row="4"
+                  x:Name="SessionsList"
+                  Style="{StaticResource SessionsListView}"
+                  ItemsSource="{Binding Sessions}"
+                  MouseDoubleClick="SessionsList_MouseDoubleClick">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="TITLE" Width="330">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Margin="6,0,0,0" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="STATUS" Width="170">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border HorizontalAlignment="Left" CornerRadius="999" Padding="9,3"
+                                        Background="{Binding Status, Converter={StaticResource StatusBrush}, ConverterParameter=bg}">
+                                    <TextBlock FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{Binding Status, Converter={StaticResource StatusBrush}}"
+                                               Text="{Binding Status, Converter={StaticResource StatusLabel}}" />
+                                </Border>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="DETAILS" Width="380">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Style="{StaticResource Muted}" Text="{Binding Detail}"
+                                           TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                </GridView>
+            </ListView.View>
+        </ListView>
+
+        <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="0,14,0,0">
+            <Button Style="{StaticResource QuietButton}" Content="Open"
+                    Command="{Binding OpenItemCommand}" CommandParameter="{Binding SelectedItem, ElementName=SessionsList}" />
+            <Button Style="{StaticResource QuietButton}" Margin="8,0,0,0" Content="Open folder"
+                    Command="{Binding OpenFolderCommand}" CommandParameter="{Binding SelectedItem, ElementName=SessionsList}" />
+            <Button Style="{StaticResource QuietButton}" Margin="8,0,0,0" Content="Copy note"
+                    Command="{Binding CopyNoteCommand}" CommandParameter="{Binding SelectedItem, ElementName=SessionsList}" />
+            <Button Style="{StaticResource QuietButton}" Margin="8,0,0,0" Content="Retry"
+                    Command="{Binding RetryCommand}" CommandParameter="{Binding SelectedItem, ElementName=SessionsList}" />
+        </StackPanel>
     </Grid>
 </Window>
