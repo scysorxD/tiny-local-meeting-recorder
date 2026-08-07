@@ -27,7 +27,7 @@ public static class SettingsDefaults
             Microphone = new DeviceSelection { Mode = MicrophoneModeDefaultCommunications },
             SystemOutput = new DeviceSelection { Mode = SystemOutputModeDefault },
             DeleteAudioAfterSuccess = true,
-            StartMinimized = true,
+            StartMinimized = false,
             CloseToTray = true,
         };
     }

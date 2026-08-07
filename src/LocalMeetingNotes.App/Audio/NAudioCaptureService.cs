@@ -12,18 +12,21 @@ namespace LocalMeetingNotes.App.Audio;
 public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
 {
     private const int TargetSampleRate = 16_000;
+
     private readonly object sync = new();
     private readonly Stopwatch recordingStopwatch = new();
     private WasapiCapture? microphoneCapture;
     private WasapiLoopbackCapture? systemCapture;
     private MMDevice? microphoneDevice;
     private MMDevice? renderDevice;
+    private MMDevice? silenceDevice;
     private SilenceLoopbackKeeper? silenceKeeper;
     private TrackWriter? microphoneWriter;
     private TrackWriter? systemWriter;
     private RecordingRequest? request;
     private TimeSpan microphoneStartOffset;
     private TimeSpan systemStartOffset;
+    private System.Threading.Timer? hardwareMeterTimer;
     private bool isStopping;
 
     public bool IsRecording { get; private set; }
@@ -79,24 +82,21 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
             {
                 StopAndDisposeAll();
                 throw new RecordingStartException(
-                    "Unable to start the requested audio capture sources.",
+                    BuildStartFailureMessage(microphoneFailure, systemFailure),
                     microphoneFailure,
                     systemFailure);
             }
 
+            StartHardwareMeterPolling();
             IsRecording = true;
         }
 
         return Task.CompletedTask;
     }
 
-    public async Task<RecordingResult> StopAsync(CancellationToken cancellationToken = default)
+    public Task<RecordingResult> StopAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-
-        WasapiCapture? microphone;
-        WasapiLoopbackCapture? system;
-        RecordingRequest activeRequest;
 
         lock (sync)
         {
@@ -111,32 +111,35 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
             }
 
             isStopping = true;
-            microphone = microphoneCapture;
-            system = systemCapture;
-            activeRequest = request;
         }
 
         try
         {
-            await Task.WhenAll(StopCaptureAsync(microphone), StopCaptureAsync(system));
+            // Never wait forever for RecordingStopped — it often never arrives on WASAPI.
+            StopHardwareMeterPolling();
+            ForceStopCapture(microphoneCapture);
+            ForceStopCapture(systemCapture);
+
+            // Give the capture thread a brief moment to flush final packets.
+            Thread.Sleep(75);
 
             lock (sync)
             {
                 microphoneWriter?.Drain();
                 systemWriter?.Drain();
-                silenceKeeper?.Stop();
 
+                var activeRequest = request!;
                 var result = new RecordingResult(
                     activeRequest.MicrophoneWavPath,
                     activeRequest.SystemWavPath,
-                    microphone is not null,
-                    system is not null,
+                    microphoneCapture is not null || File.Exists(activeRequest.MicrophoneWavPath),
+                    systemCapture is not null || File.Exists(activeRequest.SystemWavPath),
                     microphoneStartOffset,
                     systemStartOffset,
                     recordingStopwatch.Elapsed);
 
                 StopAndDisposeAll();
-                return result;
+                return Task.FromResult(result);
             }
         }
         finally
@@ -162,8 +165,7 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
         microphoneCapture = new WasapiCapture(microphoneDevice);
         microphoneWriter = new TrackWriter(
             microphoneCapture.WaveFormat,
-            recordingRequest.MicrophoneWavPath,
-            (peak, rms) => RaiseMeter(AudioTrack.Microphone, peak, rms));
+            recordingRequest.MicrophoneWavPath);
         microphoneCapture.DataAvailable += OnMicrophoneDataAvailable;
         microphoneCapture.StartRecording();
         microphoneStartOffset = recordingStopwatch.Elapsed;
@@ -171,15 +173,17 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
 
     private void StartSystemAudio(RecordingRequest recordingRequest)
     {
+        // Separate MMDevice instances for playback keeper vs loopback capture.
         renderDevice = GetDevice(recordingRequest.RenderDeviceId, DataFlow.Render, Role.Multimedia);
+        silenceDevice = GetDevice(recordingRequest.RenderDeviceId, DataFlow.Render, Role.Multimedia);
+
         silenceKeeper = new SilenceLoopbackKeeper();
-        silenceKeeper.Start(renderDevice);
+        silenceKeeper.Start(silenceDevice);
 
         systemCapture = new WasapiLoopbackCapture(renderDevice);
         systemWriter = new TrackWriter(
             systemCapture.WaveFormat,
-            recordingRequest.SystemWavPath,
-            (peak, rms) => RaiseMeter(AudioTrack.System, peak, rms));
+            recordingRequest.SystemWavPath);
         systemCapture.DataAvailable += OnSystemDataAvailable;
         systemCapture.StartRecording();
         systemStartOffset = recordingStopwatch.Elapsed;
@@ -193,38 +197,116 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
             : enumerator.GetDevice(id);
     }
 
-    private void OnMicrophoneDataAvailable(object? sender, WaveInEventArgs eventArgs) =>
-        microphoneWriter?.Write(eventArgs.Buffer, eventArgs.BytesRecorded);
+    private void OnMicrophoneDataAvailable(object? sender, WaveInEventArgs eventArgs)
+    {
+        try
+        {
+            microphoneWriter?.Write(eventArgs.Buffer, eventArgs.BytesRecorded);
+        }
+        catch
+        {
+            // Never throw on the capture thread.
+        }
+    }
 
-    private void OnSystemDataAvailable(object? sender, WaveInEventArgs eventArgs) =>
-        systemWriter?.Write(eventArgs.Buffer, eventArgs.BytesRecorded);
+    private void OnSystemDataAvailable(object? sender, WaveInEventArgs eventArgs)
+    {
+        try
+        {
+            systemWriter?.Write(eventArgs.Buffer, eventArgs.BytesRecorded);
+        }
+        catch
+        {
+            // Never throw on the capture thread.
+        }
+    }
+
+    private void StartHardwareMeterPolling()
+    {
+        StopHardwareMeterPolling();
+        hardwareMeterTimer = new System.Threading.Timer(
+            _ => PublishHardwareMeters(),
+            null,
+            dueTime: 0,
+            period: 100);
+    }
+
+    private void StopHardwareMeterPolling()
+    {
+        hardwareMeterTimer?.Dispose();
+        hardwareMeterTimer = null;
+    }
+
+    private void PublishHardwareMeters()
+    {
+        try
+        {
+            float micPeak;
+            float systemPeak;
+
+            lock (sync)
+            {
+                if (!IsRecording)
+                {
+                    return;
+                }
+
+                micPeak = SafePeak(microphoneDevice);
+                systemPeak = SafePeak(renderDevice);
+            }
+
+            RaiseMeter(AudioTrack.Microphone, micPeak, micPeak);
+            RaiseMeter(AudioTrack.System, systemPeak, systemPeak);
+        }
+        catch
+        {
+            // Meter polling must never break recording.
+        }
+    }
+
+    private static float SafePeak(MMDevice? device)
+    {
+        if (device is null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            return Math.Clamp(device.AudioMeterInformation.MasterPeakValue, 0f, 1f);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
 
     private void RaiseMeter(AudioTrack track, float peak, float rms) =>
         MetersUpdated?.Invoke(this, new AudioMeterEventArgs(track, peak, rms));
 
-    private static Task StopCaptureAsync(IWaveIn? capture)
+    private static void ForceStopCapture(IWaveIn? capture)
     {
         if (capture is null)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        EventHandler<StoppedEventArgs>? handler = null;
-        handler = (_, _) =>
+        try
         {
-            capture.RecordingStopped -= handler;
-            stopped.TrySetResult();
-        };
-
-        capture.RecordingStopped += handler;
-        capture.StopRecording();
-        return stopped.Task;
+            capture.StopRecording();
+        }
+        catch
+        {
+            // Already stopped / disposed.
+        }
     }
 
     private void StopAndDisposeAll()
     {
+        StopHardwareMeterPolling();
+
         silenceKeeper?.Stop();
+        silenceKeeper?.Dispose();
         silenceKeeper = null;
 
         DisposeMicrophone();
@@ -242,7 +324,16 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
         if (microphoneCapture is not null)
         {
             microphoneCapture.DataAvailable -= OnMicrophoneDataAvailable;
-            microphoneCapture.Dispose();
+            ForceStopCapture(microphoneCapture);
+            try
+            {
+                microphoneCapture.Dispose();
+            }
+            catch
+            {
+                // Ignore teardown races.
+            }
+
             microphoneCapture = null;
         }
 
@@ -257,47 +348,89 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
         if (systemCapture is not null)
         {
             systemCapture.DataAvailable -= OnSystemDataAvailable;
-            systemCapture.Dispose();
+            ForceStopCapture(systemCapture);
+            try
+            {
+                systemCapture.Dispose();
+            }
+            catch
+            {
+                // Ignore teardown races.
+            }
+
             systemCapture = null;
         }
 
         systemWriter?.Dispose();
         systemWriter = null;
+        silenceDevice?.Dispose();
+        silenceDevice = null;
         renderDevice?.Dispose();
         renderDevice = null;
+    }
+
+    private static string BuildStartFailureMessage(Exception? microphoneFailure, Exception? systemFailure)
+    {
+        if (microphoneFailure is not null && systemFailure is not null)
+        {
+            return $"Microphone: {microphoneFailure.Message} | System audio: {systemFailure.Message}";
+        }
+
+        if (microphoneFailure is not null)
+        {
+            return $"Microphone capture failed: {microphoneFailure.Message}";
+        }
+
+        if (systemFailure is not null)
+        {
+            return $"System audio capture failed: {systemFailure.Message}";
+        }
+
+        return "Unable to start the requested audio capture sources.";
     }
 
     private sealed class TrackWriter : IDisposable
     {
         private readonly BufferedWaveProvider input;
-        private readonly WdlResamplingSampleProvider resampler;
+        private readonly ISampleProvider resampler;
         private readonly WaveFileWriter output;
-        private readonly Action<float, float> meterCallback;
-        private readonly Stopwatch meterStopwatch = Stopwatch.StartNew();
         private readonly object writerSync = new();
 
-        public TrackWriter(WaveFormat inputFormat, string path, Action<float, float> meterCallback)
+        public TrackWriter(WaveFormat inputFormat, string path)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(path);
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
 
             input = new BufferedWaveProvider(inputFormat)
             {
-                DiscardOnBufferOverflow = false
+                DiscardOnBufferOverflow = true,
+                BufferDuration = TimeSpan.FromSeconds(5),
             };
-            resampler = new WdlResamplingSampleProvider(
-                new MonoSampleProvider(new WaveToSampleProvider(input)),
-                TargetSampleRate);
+
+            ISampleProvider sampleSource = new WaveToSampleProvider(input);
+            if (sampleSource.WaveFormat.Channels > 1)
+            {
+                sampleSource = new MonoSampleProvider(sampleSource);
+            }
+
+            resampler = sampleSource.WaveFormat.SampleRate == TargetSampleRate
+                ? sampleSource
+                : new WdlResamplingSampleProvider(sampleSource, TargetSampleRate);
+
             output = new WaveFileWriter(path, new WaveFormat(TargetSampleRate, 16, 1));
-            this.meterCallback = meterCallback;
         }
 
         public void Write(byte[] buffer, int count)
         {
+            if (count <= 0)
+            {
+                return;
+            }
+
             lock (writerSync)
             {
                 input.AddSamples(buffer, 0, count);
-                Drain();
+                DrainUnlocked();
             }
         }
 
@@ -305,26 +438,33 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
         {
             lock (writerSync)
             {
-                var sampleBuffer = new float[4_096];
-                while (true)
-                {
-                    var samplesRead = resampler.Read(sampleBuffer, 0, sampleBuffer.Length);
-                    if (samplesRead == 0)
-                    {
-                        return;
-                    }
-
-                    WritePcm16(sampleBuffer, samplesRead);
-                    if (meterStopwatch.ElapsedMilliseconds >= 125)
-                    {
-                        meterStopwatch.Restart();
-                        meterCallback(GetPeak(sampleBuffer, samplesRead), GetRms(sampleBuffer, samplesRead));
-                    }
-                }
+                DrainUnlocked();
             }
         }
 
-        public void Dispose() => output.Dispose();
+        public void Dispose()
+        {
+            lock (writerSync)
+            {
+                DrainUnlocked();
+                output.Dispose();
+            }
+        }
+
+        private void DrainUnlocked()
+        {
+            var sampleBuffer = new float[4_096];
+            while (true)
+            {
+                var samplesRead = resampler.Read(sampleBuffer, 0, sampleBuffer.Length);
+                if (samplesRead <= 0)
+                {
+                    return;
+                }
+
+                WritePcm16(sampleBuffer, samplesRead);
+            }
+        }
 
         private void WritePcm16(float[] samples, int count)
         {
@@ -340,20 +480,6 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
             output.Write(pcmBytes, 0, pcmBytes.Length);
         }
 
-        private static float GetPeak(float[] samples, int count) =>
-            samples.Take(count).Select(MathF.Abs).DefaultIfEmpty().Max();
-
-        private static float GetRms(float[] samples, int count)
-        {
-            if (count == 0)
-            {
-                return 0;
-            }
-
-            var squareSum = samples.Take(count).Sum(sample => sample * sample);
-            return MathF.Sqrt(squareSum / count);
-        }
-
         private sealed class MonoSampleProvider(ISampleProvider source) : ISampleProvider
         {
             public WaveFormat WaveFormat { get; } =
@@ -362,6 +488,11 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
             public int Read(float[] buffer, int offset, int count)
             {
                 var channels = source.WaveFormat.Channels;
+                if (channels <= 1)
+                {
+                    return source.Read(buffer, offset, count);
+                }
+
                 var sourceBuffer = new float[count * channels];
                 var sourceSamplesRead = source.Read(sourceBuffer, 0, sourceBuffer.Length);
                 var framesRead = sourceSamplesRead / channels;
