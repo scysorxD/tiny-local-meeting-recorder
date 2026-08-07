@@ -5,6 +5,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Resource Include="Assets\app-icon.png" />
+    <SplashScreen Include="Assets\splash.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
     <PackageReference Include="NAudio" Version="2.3.0" />
@@ -19,7 +24,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <ApplicationIcon />
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <RootNamespace>LocalMeetingNotes.App</RootNamespace>
     <AssemblyName>LocalMeetingNotes</AssemblyName>
   </PropertyGroup>

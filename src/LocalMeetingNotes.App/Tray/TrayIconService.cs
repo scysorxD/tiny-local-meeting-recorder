@@ -1,4 +1,7 @@
+using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using LocalMeetingNotes.App.ViewModels;
 using LocalMeetingNotes.Core.Models;
@@ -7,6 +10,12 @@ namespace LocalMeetingNotes.App.Tray;
 
 public sealed class TrayIconService : IDisposable
 {
+    private static readonly Color RecordingColor = Color.FromArgb(0xFF, 0x5F, 0x57);
+    private static readonly Color IdleColor = Color.FromArgb(0x3F, 0xC1, 0x7A);
+
+    private readonly List<IntPtr> _iconHandles = [];
+    private readonly Icon _recordingIcon;
+    private readonly Icon _idleIcon;
     private readonly NotifyIcon _notifyIcon;
     private readonly MainViewModel _viewModel;
     private readonly Action _showMainWindow;
@@ -25,11 +34,14 @@ public sealed class TrayIconService : IDisposable
         _openSettings = openSettings;
         _exit = exit;
 
+        _recordingIcon = CreateCircleIcon(RecordingColor);
+        _idleIcon = CreateCircleIcon(IdleColor);
+
         _notifyIcon = new NotifyIcon
         {
             Text = "Local Meeting Notes",
             Visible = true,
-            Icon = System.Drawing.SystemIcons.Application,
+            Icon = _idleIcon,
         };
 
         _notifyIcon.DoubleClick += (_, _) => _showMainWindow();
@@ -40,14 +52,9 @@ public sealed class TrayIconService : IDisposable
     public void UpdateStatus(GlobalAppStatus status, string tooltip)
     {
         _notifyIcon.Text = tooltip.Length <= 63 ? tooltip : tooltip[..63];
-        _notifyIcon.Icon = status switch
-        {
-            GlobalAppStatus.Recording => System.Drawing.SystemIcons.Error,
-            GlobalAppStatus.Transcribing => System.Drawing.SystemIcons.Information,
-            GlobalAppStatus.RecordingAndTranscribing => System.Drawing.SystemIcons.Warning,
-            GlobalAppStatus.Error => System.Drawing.SystemIcons.Exclamation,
-            _ => System.Drawing.SystemIcons.Application,
-        };
+        _notifyIcon.Icon = status is GlobalAppStatus.Recording or GlobalAppStatus.RecordingAndTranscribing
+            ? _recordingIcon
+            : _idleIcon;
     }
 
     public void Dispose()
@@ -60,6 +67,35 @@ public sealed class TrayIconService : IDisposable
         _disposed = true;
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
+        _recordingIcon.Dispose();
+        _idleIcon.Dispose();
+
+        foreach (var handle in _iconHandles)
+        {
+            DestroyIcon(handle);
+        }
+
+        _iconHandles.Clear();
+    }
+
+    [DllImport("user32.dll", PreserveSig = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyIcon(IntPtr handle);
+
+    private Icon CreateCircleIcon(Color color)
+    {
+        using var bitmap = new Bitmap(32, 32);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            graphics.Clear(Color.Transparent);
+            using var brush = new SolidBrush(color);
+            graphics.FillEllipse(brush, 3, 3, 26, 26);
+        }
+
+        var handle = bitmap.GetHicon();
+        _iconHandles.Add(handle);
+        return Icon.FromHandle(handle);
     }
 
     private ContextMenuStrip BuildMenu()

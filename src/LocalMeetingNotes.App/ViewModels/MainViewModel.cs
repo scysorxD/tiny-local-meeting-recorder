@@ -20,6 +20,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly ITranscriptionQueue _transcriptionQueue;
     private readonly System.Windows.Threading.DispatcherTimer _timer;
     private readonly System.Windows.Threading.DispatcherTimer _meterTimer;
+    private readonly Dictionary<Guid, int> _progressBySession = [];
     private DateTimeOffset? _recordingStartedAt;
     private bool _disposed;
 
@@ -221,6 +222,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Sessions.Clear();
         foreach (var row in rows)
         {
+            if (row.SessionId is { } id && _progressBySession.TryGetValue(id, out var percentage))
+            {
+                row.ProgressPercentage = percentage;
+            }
+
             Sessions.Add(row);
         }
     }
@@ -344,8 +350,40 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             StatusText = args.Percentage is { } percentage
                 ? $"{args.Status}: {percentage}%"
                 : args.Status.ToString();
+
+            TrackProgress(args);
+
+            var row = Sessions.FirstOrDefault(candidate => candidate.SessionId == args.SessionId);
+            var isSameStepUpdate = row is not null
+                && args.Percentage is not null
+                && row.Status == args.Status.ToString();
+
+            if (isSameStepUpdate)
+            {
+                // Percentage ticks are frequent: update in place so the list keeps its selection.
+                row!.ProgressPercentage = args.Percentage;
+                return;
+            }
+
             await RefreshSessionsAsync();
         });
+    }
+
+    private void TrackProgress(SessionProgressEventArgs args)
+    {
+        var isRunning = args.Status is SessionStatus.TranscribingMic
+            or SessionStatus.TranscribingSystem
+            or SessionStatus.Merging
+            or SessionStatus.WritingNote;
+
+        if (isRunning && args.Percentage is { } percentage)
+        {
+            _progressBySession[args.SessionId] = percentage;
+        }
+        else if (!isRunning)
+        {
+            _progressBySession.Remove(args.SessionId);
+        }
     }
 
     private void OnSettingsReloaded(object? sender, AppSettings settings)

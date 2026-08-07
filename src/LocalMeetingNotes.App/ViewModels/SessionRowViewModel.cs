@@ -5,6 +5,8 @@ namespace LocalMeetingNotes.App.ViewModels;
 
 public sealed class SessionRowViewModel : ObservableObject
 {
+    private int? progressPercentage;
+
     private SessionRowViewModel(
         Guid? sessionId,
         string title,
@@ -28,6 +30,26 @@ public sealed class SessionRowViewModel : ObservableObject
     public string Detail { get; }
 
     public string Path { get; }
+
+    /// <summary>
+    /// Transcription progress for this session, or null when nothing is running.
+    /// </summary>
+    public int? ProgressPercentage
+    {
+        get => progressPercentage;
+        set
+        {
+            if (SetProperty(ref progressPercentage, value))
+            {
+                OnPropertyChanged(nameof(HasProgress));
+                OnPropertyChanged(nameof(ProgressFraction));
+            }
+        }
+    }
+
+    public bool HasProgress => progressPercentage is not null;
+
+    public double ProgressFraction => (progressPercentage ?? 0) / 100d;
 
     public static SessionRowViewModel FromSession(MeetingSession session) =>
         new(

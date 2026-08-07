@@ -6,6 +6,7 @@
         xmlns:views="clr-namespace:LocalMeetingNotes.App.Views"
         mc:Ignorable="d"
         Title="Local Meeting Notes"
+        Icon="pack://application:,,,/Assets/app-icon.png"
         Height="640" Width="980" MinHeight="520" MinWidth="820"
         Background="{StaticResource FloorBrush}"
         TextOptions.TextFormattingMode="Ideal"
@@ -146,15 +147,27 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn Header="STATUS" Width="170">
+                    <GridViewColumn Header="STATUS" Width="200">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <Border HorizontalAlignment="Left" CornerRadius="999" Padding="9,3"
-                                        Background="{Binding Status, Converter={StaticResource StatusBrush}, ConverterParameter=bg}">
-                                    <TextBlock FontSize="11" FontWeight="SemiBold"
-                                               Foreground="{Binding Status, Converter={StaticResource StatusBrush}}"
-                                               Text="{Binding Status, Converter={StaticResource StatusLabel}}" />
-                                </Border>
+                                <StackPanel HorizontalAlignment="Left">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border CornerRadius="999" Padding="9,3"
+                                                Background="{Binding Status, Converter={StaticResource StatusBrush}, ConverterParameter=bg}">
+                                            <TextBlock FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{Binding Status, Converter={StaticResource StatusBrush}}"
+                                                       Text="{Binding Status, Converter={StaticResource StatusLabel}}" />
+                                        </Border>
+                                        <TextBlock Style="{StaticResource Caption}" Margin="8,0,0,0"
+                                                   VerticalAlignment="Center"
+                                                   Text="{Binding ProgressPercentage, StringFormat={}{0}%}"
+                                                   Visibility="{Binding HasProgress, Converter={StaticResource BoolToVisibility}}" />
+                                    </StackPanel>
+                                    <ProgressBar Style="{StaticResource MeterBar}" Height="4" Width="160"
+                                                 Margin="0,7,0,0" HorizontalAlignment="Left"
+                                                 Value="{Binding ProgressFraction, Mode=OneWay}"
+                                                 Visibility="{Binding HasProgress, Converter={StaticResource BoolToVisibility}}" />
+                                </StackPanel>
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>

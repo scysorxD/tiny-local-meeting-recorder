@@ -31,6 +31,7 @@ public partial class MainWindow : Window
         DataContext = viewModel;
         _viewModel.StartRequested += OnStartRequested;
         _viewModel.SettingsRequested += OnSettingsRequested;
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         Closing += OnClosing;
         Closed += OnClosed;
         StateChanged += OnStateChanged;
@@ -83,6 +84,14 @@ public partial class MainWindow : Window
     }
 
     private void OnSettingsRequested(object? sender, EventArgs e) => OpenSettings();
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(MainViewModel.IsRecording) or nameof(MainViewModel.StatusText))
+        {
+            _tray.UpdateStatus(_viewModel.ComputeGlobalStatus(), _viewModel.StatusText);
+        }
+    }
 
     public void OpenSettings()
     {
@@ -146,6 +155,7 @@ public partial class MainWindow : Window
     {
         _viewModel.StartRequested -= OnStartRequested;
         _viewModel.SettingsRequested -= OnSettingsRequested;
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         Closing -= OnClosing;
         StateChanged -= OnStateChanged;
         _viewModel.Dispose();
