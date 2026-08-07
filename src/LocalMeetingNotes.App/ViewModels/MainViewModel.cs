@@ -146,30 +146,45 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public async Task StopRecordingAsync()
     {
         StatusText = "Stopping recording…";
-        var session = await _recordingCoordinator.StopAsync();
 
-        _timer.Stop();
-        IsRecording = false;
-        ElapsedText = "00:00:00";
-        MicrophoneLevel = 0;
-        SystemLevel = 0;
+        try
+        {
+            var session = await _recordingCoordinator.StopAsync();
 
-        if (session.Status == SessionStatus.Queued)
-        {
-            _transcriptionQueue.Enqueue(session.SessionId);
-            StatusText = "Recording saved; transcription queued.";
-        }
-        else if (session.Status == SessionStatus.WaitingForModel)
-        {
-            StatusText = "Recording saved; waiting for a Whisper model.";
-        }
-        else
-        {
-            StatusText = session.Error ?? $"Recording {session.Status}.";
-        }
+            _timer.Stop();
+            IsRecording = false;
+            ElapsedText = "00:00:00";
+            MicrophoneLevel = 0;
+            SystemLevel = 0;
 
-        RefreshModelWarning();
-        await RefreshSessionsAsync();
+            if (session.Status == SessionStatus.Queued)
+            {
+                _transcriptionQueue.Enqueue(session.SessionId);
+                StatusText = "Recording saved; transcription queued.";
+            }
+            else if (session.Status == SessionStatus.WaitingForModel)
+            {
+                StatusText = "Recording saved; waiting for a Whisper model.";
+            }
+            else
+            {
+                StatusText = session.Error ?? $"Recording {session.Status}.";
+            }
+
+            RefreshModelWarning();
+            await RefreshSessionsAsync();
+        }
+        catch (Exception exception)
+        {
+            _timer.Stop();
+            IsRecording = _captureService.IsRecording;
+            StatusText = $"Stop failed: {exception.Message}";
+            System.Windows.MessageBox.Show(
+                exception.Message,
+                "Unable to stop recording",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
+        }
     }
 
     public async Task RefreshSessionsAsync()

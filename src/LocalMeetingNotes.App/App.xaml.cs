@@ -63,11 +63,15 @@ public partial class App : System.Windows.Application
 
             if (settingsStore.Current.StartMinimized)
             {
+                _mainWindow.WindowState = WindowState.Minimized;
+                _mainWindow.Show();
                 _mainWindow.Hide();
             }
             else
             {
                 _mainWindow.Show();
+                _mainWindow.WindowState = WindowState.Normal;
+                _mainWindow.Activate();
             }
 
             logger.Info("Application ready");
