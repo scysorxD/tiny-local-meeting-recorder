@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO;
 using LocalMeetingNotes.Core.Interfaces;
@@ -128,7 +127,6 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
             isStopping = true;
             IsRecording = false;
 
-            // Detach callbacks BEFORE StopRecording to avoid capture-thread deadlocks.
             if (microphoneCapture is not null)
             {
                 microphoneCapture.DataAvailable -= OnMicrophoneDataAvailable;
@@ -157,7 +155,6 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
             request = null;
         }
 
-        // Stop/dispose outside the lock and never wait on RecordingStopped.
         try
         {
             try { mic?.StopRecording(); } catch { /* ignore */ }
@@ -168,9 +165,19 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
             try { system?.Dispose(); } catch { /* ignore */ }
             try { keeper?.Dispose(); } catch { /* ignore */ }
 
-            // Bounded flush only — never an open-ended resample drain loop.
             try { micWriter?.FlushAndDispose(); } catch { /* ignore */ }
             try { systemWriterLocal?.FlushAndDispose(); } catch { /* ignore */ }
+
+            // Convert native capture WAVs to Whisper-ready 16 kHz mono PCM16 after capture ends.
+            if (File.Exists(activeRequest.MicrophoneWavPath))
+            {
+                ConvertToWhisperWav(activeRequest.MicrophoneWavPath);
+            }
+
+            if (File.Exists(activeRequest.SystemWavPath))
+            {
+                ConvertToWhisperWav(activeRequest.SystemWavPath);
+            }
 
             lock (stateLock)
             {
@@ -232,6 +239,7 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
     {
         microphoneDevice = GetDevice(recordingRequest.MicrophoneDeviceId, DataFlow.Capture, Role.Communications);
         microphoneCapture = new WasapiCapture(microphoneDevice);
+        // Write the device's native format during capture — no resampling on the audio callback thread.
         microphoneWriter = new TrackWriter(microphoneCapture.WaveFormat, recordingRequest.MicrophoneWavPath);
         microphoneCapture.DataAvailable += OnMicrophoneDataAvailable;
         microphoneCapture.StartRecording();
@@ -300,7 +308,6 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
 
         try
         {
-            // Prefer WASAPI float buffers.
             if (format.Encoding == WaveFormatEncoding.IeeeFloat && format.BitsPerSample == 32)
             {
                 var floats = count / sizeof(float);
@@ -339,6 +346,38 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// Converts a captured WAV (any WASAPI mix format) to 16 kHz mono PCM16 for Whisper.
+    /// </summary>
+    private static void ConvertToWhisperWav(string path)
+    {
+        var tempPath = path + ".16k.tmp.wav";
+        try
+        {
+            using (var reader = new AudioFileReader(path))
+            {
+                ISampleProvider mono = reader.WaveFormat.Channels == 1
+                    ? reader
+                    : new StereoToMonoSampleProvider(reader);
+
+                ISampleProvider resampled = mono.WaveFormat.SampleRate == TargetSampleRate
+                    ? mono
+                    : new WdlResamplingSampleProvider(mono, TargetSampleRate);
+
+                WaveFileWriter.CreateWaveFile16(tempPath, resampled);
+            }
+
+            File.Copy(tempPath, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
     }
 
     private void StopAndDisposeAll_NoLock()
@@ -417,13 +456,10 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
     }
 
     /// <summary>
-    /// Writes capture audio to 16 kHz mono PCM16. Resampling happens in small bounded chunks
-    /// so Stop never blocks on an unbounded drain loop.
+    /// Writes capture buffers verbatim in the device native format. Fast and gap-free.
     /// </summary>
     private sealed class TrackWriter
     {
-        private readonly BufferedWaveProvider input;
-        private readonly ISampleProvider resampler;
         private readonly WaveFileWriter output;
         private readonly object writerSync = new();
         private bool disposed;
@@ -432,24 +468,7 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(path);
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-
-            input = new BufferedWaveProvider(inputFormat)
-            {
-                DiscardOnBufferOverflow = true,
-                BufferDuration = TimeSpan.FromSeconds(2),
-            };
-
-            ISampleProvider sampleSource = new WaveToSampleProvider(input);
-            if (sampleSource.WaveFormat.Channels > 1)
-            {
-                sampleSource = new StereoToMonoSampleProvider(sampleSource);
-            }
-
-            resampler = sampleSource.WaveFormat.SampleRate == TargetSampleRate
-                ? sampleSource
-                : new WdlResamplingSampleProvider(sampleSource, TargetSampleRate);
-
-            output = new WaveFileWriter(path, new WaveFormat(TargetSampleRate, 16, 1));
+            output = new WaveFileWriter(path, inputFormat);
         }
 
         public void Write(byte[] buffer, int count)
@@ -466,8 +485,7 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
                     return;
                 }
 
-                input.AddSamples(buffer, 0, count);
-                Pump(maxReads: 8);
+                output.Write(buffer, 0, count);
             }
         }
 
@@ -480,66 +498,42 @@ public sealed class NAudioCaptureService : IAudioCaptureService, IDisposable
                     return;
                 }
 
-                Pump(maxReads: 64);
+                output.Flush();
                 output.Dispose();
                 disposed = true;
             }
         }
+    }
 
-        private void Pump(int maxReads)
+    private sealed class StereoToMonoSampleProvider(ISampleProvider source) : ISampleProvider
+    {
+        public WaveFormat WaveFormat { get; } =
+            WaveFormat.CreateIeeeFloatWaveFormat(source.WaveFormat.SampleRate, 1);
+
+        public int Read(float[] buffer, int offset, int count)
         {
-            var sampleBuffer = new float[2_048];
-            for (var i = 0; i < maxReads; i++)
+            var channels = source.WaveFormat.Channels;
+            if (channels <= 1)
             {
-                var samplesRead = resampler.Read(sampleBuffer, 0, sampleBuffer.Length);
-                if (samplesRead <= 0)
-                {
-                    return;
-                }
-
-                var pcmBytes = new byte[samplesRead * sizeof(short)];
-                for (var index = 0; index < samplesRead; index++)
-                {
-                    var sample = (short)Math.Clamp(sampleBuffer[index] * short.MaxValue, short.MinValue, short.MaxValue);
-                    BinaryPrimitives.WriteInt16LittleEndian(
-                        pcmBytes.AsSpan(index * sizeof(short), sizeof(short)),
-                        sample);
-                }
-
-                output.Write(pcmBytes, 0, pcmBytes.Length);
+                return source.Read(buffer, offset, count);
             }
-        }
 
-        private sealed class StereoToMonoSampleProvider(ISampleProvider source) : ISampleProvider
-        {
-            public WaveFormat WaveFormat { get; } =
-                WaveFormat.CreateIeeeFloatWaveFormat(source.WaveFormat.SampleRate, 1);
+            var sourceBuffer = new float[count * channels];
+            var sourceSamplesRead = source.Read(sourceBuffer, 0, sourceBuffer.Length);
+            var framesRead = sourceSamplesRead / channels;
 
-            public int Read(float[] buffer, int offset, int count)
+            for (var frame = 0; frame < framesRead; frame++)
             {
-                var channels = source.WaveFormat.Channels;
-                if (channels <= 1)
+                var sum = 0f;
+                for (var channel = 0; channel < channels; channel++)
                 {
-                    return source.Read(buffer, offset, count);
+                    sum += sourceBuffer[(frame * channels) + channel];
                 }
 
-                var sourceBuffer = new float[count * channels];
-                var sourceSamplesRead = source.Read(sourceBuffer, 0, sourceBuffer.Length);
-                var framesRead = sourceSamplesRead / channels;
-
-                for (var frame = 0; frame < framesRead; frame++)
-                {
-                    var sum = 0f;
-                    for (var channel = 0; channel < channels; channel++)
-                    {
-                        sum += sourceBuffer[(frame * channels) + channel];
-                    }
-
-                    buffer[offset + frame] = sum / channels;
-                }
-
-                return framesRead;
+                buffer[offset + frame] = sum / channels;
             }
+
+            return framesRead;
         }
     }
 }

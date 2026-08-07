@@ -13,6 +13,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private readonly RecordingCoordinator _recordingCoordinator;
     private readonly IAudioCaptureService _captureService;
+    private readonly IAudioDeviceService _deviceService;
     private readonly ISessionRepository _sessionRepository;
     private readonly ISettingsStore _settingsStore;
     private readonly IModelCatalog _modelCatalog;
@@ -25,6 +26,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public MainViewModel(
         RecordingCoordinator recordingCoordinator,
         IAudioCaptureService captureService,
+        IAudioDeviceService deviceService,
         ISessionRepository sessionRepository,
         ISettingsStore settingsStore,
         IModelCatalog modelCatalog,
@@ -32,6 +34,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         _recordingCoordinator = recordingCoordinator;
         _captureService = captureService;
+        _deviceService = deviceService;
         _sessionRepository = sessionRepository;
         _settingsStore = settingsStore;
         _modelCatalog = modelCatalog;
@@ -132,6 +135,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public async Task InitializeAsync()
     {
         RefreshModelWarning();
+        _meterTimer.Start();
         await RefreshSessionsAsync();
     }
 
@@ -142,14 +146,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IsRecording = true;
         StatusText = "Recording";
         _timer.Start();
-        _meterTimer.Start();
         await RefreshSessionsAsync();
     }
 
     public async Task StopRecordingAsync()
     {
         StatusText = "Stopping recording…";
-        _meterTimer.Stop();
         MicrophoneLevel = 0;
         SystemLevel = 0;
 
@@ -183,11 +185,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             _timer.Stop();
             IsRecording = _captureService.IsRecording;
-            if (IsRecording)
-            {
-                _meterTimer.Start();
-            }
-
             StatusText = $"Stop failed: {exception.Message}";
             System.Windows.MessageBox.Show(
                 exception.Message,
@@ -323,12 +320,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void UpdateMetersFromCapture()
     {
-        if (!IsRecording)
+        float mic;
+        float system;
+
+        if (IsRecording)
         {
-            return;
+            (mic, system) = _captureService.GetLivePeaks();
+        }
+        else
+        {
+            (mic, system) = _deviceService.GetLiveDevicePeaks();
         }
 
-        var (mic, system) = _captureService.GetLivePeaks();
         // Mild boost so quiet speech is still visible on the bar.
         MicrophoneLevel = Math.Clamp(Math.Sqrt(Math.Max(mic, 0)), 0, 1);
         SystemLevel = Math.Clamp(Math.Sqrt(Math.Max(system, 0)), 0, 1);

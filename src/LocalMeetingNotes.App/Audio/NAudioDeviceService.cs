@@ -19,6 +19,36 @@ public sealed class NAudioDeviceService : IAudioDeviceService
     public AudioDeviceInfo? GetDefaultRenderDevice() =>
         GetDefault(DataFlow.Render, Role.Multimedia);
 
+    public (float MicrophonePeak, float SystemPeak) GetLiveDevicePeaks()
+    {
+        float microphone = 0;
+        float system = 0;
+
+        using var enumerator = new MMDeviceEnumerator();
+
+        try
+        {
+            using var mic = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
+            microphone = Math.Clamp(mic.AudioMeterInformation.MasterPeakValue, 0f, 1f);
+        }
+        catch (COMException)
+        {
+            // Device unavailable.
+        }
+
+        try
+        {
+            using var render = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+            system = Math.Clamp(render.AudioMeterInformation.MasterPeakValue, 0f, 1f);
+        }
+        catch (COMException)
+        {
+            // Device unavailable.
+        }
+
+        return (microphone, system);
+    }
+
     private static IReadOnlyList<AudioDeviceInfo> GetDevices(DataFlow dataFlow, string? defaultId)
     {
         using var enumerator = new MMDeviceEnumerator();

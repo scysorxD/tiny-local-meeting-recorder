@@ -11,4 +11,9 @@ public interface IAudioDeviceService
     AudioDeviceInfo? GetDefaultCommunicationsMicrophone();
 
     AudioDeviceInfo? GetDefaultRenderDevice();
+
+    /// <summary>
+    /// Live WASAPI peak meters for the current default mic/output (works without an active recording).
+    /// </summary>
+    (float MicrophonePeak, float SystemPeak) GetLiveDevicePeaks();
 }
