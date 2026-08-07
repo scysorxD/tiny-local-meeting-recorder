@@ -1,0 +1,12 @@
+E:\_GIT\tiny-local-meeting-recorder\src\LocalMeetingNotes.Core\bin\Debug\net10.0\LocalMeetingNotes.Core.deps.json
+E:\_GIT\tiny-local-meeting-recorder\src\LocalMeetingNotes.Core\bin\Debug\net10.0\LocalMeetingNotes.Core.dll
+E:\_GIT\tiny-local-meeting-recorder\src\LocalMeetingNotes.Core\bin\Debug\net10.0\LocalMeetingNotes.Core.pdb
+E:\_GIT\tiny-local-meeting-recorder\src\LocalMeetingNotes.Core\obj\Debug\net10.0\LocalMeetingNotes.Core.GeneratedMSBuildEditorConfig.editorconfig
+E:\_GIT\tiny-local-meeting-recorder\src\LocalMeetingNotes.Core\obj\Debug\net10.0\LocalMeetingNotes.Core.AssemblyInfoInputs.cache
+E:\_GIT\tiny-local-meeting-recorder\src\LocalMeetingNotes.Core\obj\Debug\net10.0\LocalMeetingNotes.Core.AssemblyInfo.cs
+E:\_GIT\tiny-local-meeting-recorder\src\LocalMeetingNotes.Core\obj\Debug\net10.0\LocalMeetingNotes.Core.csproj.CoreCompileInputs.cache
+E:\_GIT\tiny-local-meeting-recorder\src\LocalMeetingNotes.Core\obj\Debug\net10.0\LocalMeetingNotes.Core.sourcelink.json
+E:\_GIT\tiny-local-meeting-recorder\src\LocalMeetingNotes.Core\obj\Debug\net10.0\LocalMeetingNotes.Core.dll
+E:\_GIT\tiny-local-meeting-recorder\src\LocalMeetingNotes.Core\obj\Debug\net10.0\refint\LocalMeetingNotes.Core.dll
+E:\_GIT\tiny-local-meeting-recorder\src\LocalMeetingNotes.Core\obj\Debug\net10.0\LocalMeetingNotes.Core.pdb
+E:\_GIT\tiny-local-meeting-recorder\src\LocalMeetingNotes.Core\obj\Debug\net10.0\ref\LocalMeetingNotes.Core.dll

@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LocalMeetingNotes.App/LocalMeetingNotes.App.csproj" />
+    <Project Path="src/LocalMeetingNotes.Core/LocalMeetingNotes.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LocalMeetingNotes.Core.Tests/LocalMeetingNotes.Core.Tests.csproj" />
+    <Project Path="tests/LocalMeetingNotes.IntegrationTests/LocalMeetingNotes.IntegrationTests.csproj" />
+  </Folder>
+</Solution>
