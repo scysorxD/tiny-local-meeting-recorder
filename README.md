@@ -23,10 +23,12 @@ The app never downloads models. It only reads ready `.bin` files from the config
 ## Build and run
 
 ```bash
-dotnet build LocalMeetingNotes.slnx
+dotnet build LocalMeetingNotes.sln
 dotnet run --project src/LocalMeetingNotes.App
-dotnet test LocalMeetingNotes.slnx
+dotnet test LocalMeetingNotes.sln
 ```
+
+Open `LocalMeetingNotes.sln` in Visual Studio (set `LocalMeetingNotes.App` as startup project). A `LocalMeetingNotes.slnx` also exists for the newer XML solution format.
 
 ## Publish
 

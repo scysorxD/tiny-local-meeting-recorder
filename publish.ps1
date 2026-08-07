@@ -5,13 +5,13 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 
 Write-Host "==> Clean"
-dotnet clean LocalMeetingNotes.slnx -c Release
+dotnet clean LocalMeetingNotes.sln -c Release
 
 Write-Host "==> Restore"
-dotnet restore LocalMeetingNotes.slnx
+dotnet restore LocalMeetingNotes.sln
 
 Write-Host "==> Test"
-dotnet test LocalMeetingNotes.slnx -c Release --no-restore
+dotnet test LocalMeetingNotes.sln -c Release --no-restore
 if ($LASTEXITCODE -ne 0) {
     throw "Tests failed; publish aborted."
 }
