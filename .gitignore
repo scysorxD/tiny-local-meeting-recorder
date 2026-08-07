@@ -1,0 +1,4 @@
+# Whisper model binaries — provision locally from the split archives.
+# Keep compressed transport files (*.rar / *.zip / *.7z) in the repo.
+models/*.bin
+models/**/*.bin
