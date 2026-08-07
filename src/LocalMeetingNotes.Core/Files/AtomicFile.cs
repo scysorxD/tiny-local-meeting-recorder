@@ -4,7 +4,11 @@ namespace LocalMeetingNotes.Core.Files;
 
 public static class AtomicFile
 {
-    public static async Task WriteUtf8Async(string destinationPath, string content, CancellationToken cancellationToken = default)
+    public static async Task WriteUtf8Async(
+        string destinationPath,
+        string content,
+        CancellationToken cancellationToken = default,
+        bool overwrite = false)
     {
         var directory = Path.GetDirectoryName(destinationPath)
             ?? throw new ArgumentException("Destination path must include a directory.", nameof(destinationPath));
@@ -33,7 +37,7 @@ public static class AtomicFile
             await stream.FlushAsync(cancellationToken);
         }
 
-        File.Move(tempPath, destinationPath, overwrite: false);
+        File.Move(tempPath, destinationPath, overwrite: overwrite);
 
         var readBack = await File.ReadAllTextAsync(destinationPath, Encoding.UTF8, cancellationToken);
         if (!string.Equals(readBack, content, StringComparison.Ordinal))
