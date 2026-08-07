@@ -2,3 +2,10 @@
 # Keep compressed transport files (*.rar / *.zip / *.7z) in the repo.
 models/*.bin
 models/**/*.bin
+
+# .NET build outputs
+**/bin/
+**/obj/
+*.user
+*.suo
+.vs/
