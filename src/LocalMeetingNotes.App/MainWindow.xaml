@@ -37,12 +37,18 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <StackPanel Margin="0,0,12,0">
-                <TextBlock Text="Microphone level" />
-                <ProgressBar Height="14" Maximum="1" Value="{Binding MicrophoneLevel}" />
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding MicrophoneLevel, StringFormat={}{0:P0}}" />
+                    <TextBlock Text="Microphone level" />
+                </DockPanel>
+                <ProgressBar Height="18" Minimum="0" Maximum="1" Value="{Binding MicrophoneLevel, Mode=OneWay}" />
             </StackPanel>
             <StackPanel Grid.Column="1">
-                <TextBlock Text="System audio level" />
-                <ProgressBar Height="14" Maximum="1" Value="{Binding SystemLevel}" />
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding SystemLevel, StringFormat={}{0:P0}}" />
+                    <TextBlock Text="System audio level" />
+                </DockPanel>
+                <ProgressBar Height="18" Minimum="0" Maximum="1" Value="{Binding SystemLevel, Mode=OneWay}" />
             </StackPanel>
         </Grid>
 

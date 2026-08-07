@@ -18,6 +18,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly IModelCatalog _modelCatalog;
     private readonly ITranscriptionQueue _transcriptionQueue;
     private readonly System.Windows.Threading.DispatcherTimer _timer;
+    private readonly System.Windows.Threading.DispatcherTimer _meterTimer;
     private DateTimeOffset? _recordingStartedAt;
     private bool _disposed;
 
@@ -45,8 +46,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OpenFolderCommand = new RelayCommand<SessionRowViewModel>(OpenFolder);
         _timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _timer.Tick += (_, _) => UpdateElapsed();
+        _meterTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+        _meterTimer.Tick += (_, _) => UpdateMetersFromCapture();
 
-        _captureService.MetersUpdated += OnMetersUpdated;
         _transcriptionQueue.ProgressChanged += OnQueueProgressChanged;
         _settingsStore.SettingsReloaded += OnSettingsReloaded;
     }
@@ -140,22 +142,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IsRecording = true;
         StatusText = "Recording";
         _timer.Start();
+        _meterTimer.Start();
         await RefreshSessionsAsync();
     }
 
     public async Task StopRecordingAsync()
     {
         StatusText = "Stopping recording…";
+        _meterTimer.Stop();
+        MicrophoneLevel = 0;
+        SystemLevel = 0;
 
         try
         {
-            var session = await _recordingCoordinator.StopAsync();
+            // Capture teardown must not run on the UI thread (WASAPI can deadlock there).
+            var session = await Task.Run(() => _recordingCoordinator.StopAsync());
 
             _timer.Stop();
             IsRecording = false;
             ElapsedText = "00:00:00";
-            MicrophoneLevel = 0;
-            SystemLevel = 0;
 
             if (session.Status == SessionStatus.Queued)
             {
@@ -178,6 +183,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             _timer.Stop();
             IsRecording = _captureService.IsRecording;
+            if (IsRecording)
+            {
+                _meterTimer.Start();
+            }
+
             StatusText = $"Stop failed: {exception.Message}";
             System.Windows.MessageBox.Show(
                 exception.Message,
@@ -293,7 +303,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         _disposed = true;
         _timer.Stop();
-        _captureService.MetersUpdated -= OnMetersUpdated;
+        _meterTimer.Stop();
         _transcriptionQueue.ProgressChanged -= OnQueueProgressChanged;
         _settingsStore.SettingsReloaded -= OnSettingsReloaded;
     }
@@ -311,19 +321,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void OnMetersUpdated(object? sender, AudioMeterEventArgs args)
+    private void UpdateMetersFromCapture()
     {
-        _ = System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+        if (!IsRecording)
         {
-            if (args.Track == AudioTrack.Microphone)
-            {
-                MicrophoneLevel = args.Peak;
-            }
-            else
-            {
-                SystemLevel = args.Peak;
-            }
-        });
+            return;
+        }
+
+        var (mic, system) = _captureService.GetLivePeaks();
+        // Mild boost so quiet speech is still visible on the bar.
+        MicrophoneLevel = Math.Clamp(Math.Sqrt(Math.Max(mic, 0)), 0, 1);
+        SystemLevel = Math.Clamp(Math.Sqrt(Math.Max(system, 0)), 0, 1);
     }
 
     private void OnQueueProgressChanged(object? sender, SessionProgressEventArgs args)

@@ -18,15 +18,32 @@ public sealed class SilenceLoopbackKeeper : IDisposable
         }
 
         var waveFormat = renderDevice.AudioClient.MixFormat;
-        output = new WasapiOut(renderDevice, AudioClientShareMode.Shared, true, 50);
+        // useEventSync: false avoids extra wait handles that can complicate teardown.
+        output = new WasapiOut(renderDevice, AudioClientShareMode.Shared, useEventSync: false, latency: 100);
         output.Init(new SilenceWaveProvider(waveFormat));
         output.Play();
     }
 
     public void Stop()
     {
-        output?.Stop();
-        output?.Dispose();
+        try
+        {
+            output?.Stop();
+        }
+        catch
+        {
+            // Ignore teardown races.
+        }
+
+        try
+        {
+            output?.Dispose();
+        }
+        catch
+        {
+            // Ignore teardown races.
+        }
+
         output = null;
     }
 

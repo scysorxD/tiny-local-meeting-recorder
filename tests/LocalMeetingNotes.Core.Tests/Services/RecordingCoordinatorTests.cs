@@ -279,6 +279,8 @@ public class RecordingCoordinatorTests : IDisposable
             TimeSpan.Zero,
             TimeSpan.Zero);
 
+        public (float MicrophonePeak, float SystemPeak) GetLivePeaks() => (0f, 0f);
+
         public Task StartAsync(RecordingRequest request, CancellationToken cancellationToken = default)
         {
             StartCalls.Add(request);
